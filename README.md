@@ -9,7 +9,7 @@ The input images are 24-bit, but are converted to 8-bit at the loading time.
 The only part performed by the GPU kernel is the removal of the blue component. (cut_blue_element())
 
 The 8-bit pixels consist of 3 bits for Red and Green and 2 bits for Blue.
-The following operations are then performed to remove the Blue component (last 2bits).
+The following operations are then performed to remove the Blue component (last 2bits).  
 `d_dst[idx] = d_img[idx] & 0xFC; // 1111 1100`
 
 Since loadImage() and saveImage() did not support ImageCPU_8u_C3, I defined them on blueCutFilter.cu file.
