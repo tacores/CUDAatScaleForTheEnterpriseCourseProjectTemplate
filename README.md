@@ -1,4 +1,4 @@
-# 'CUDA at Scale for the Enterprise' final project
+# Coursera GPU Programming final project
 
 ## repository URL
 https://github.com/tacores/CUDAatScaleForTheEnterpriseCourseProjectTemplate
