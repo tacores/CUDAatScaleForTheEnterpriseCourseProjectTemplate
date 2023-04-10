@@ -1,25 +1,30 @@
 
+Environment Requirement
 
-{"01.jpg", "02.jpg", "03.jpg", "04.jpg", "05.jpg", "06.jpg", "07.jpg", "08.jpg", "09.jpg", "10.jpg"}
-{"01_o.jpg", "02_o.jpg", "03_o.jpg", "04_o.jpg", "05_o.jpg", "06_o.jpg", "07_o.jpg", "08_o.jpg", "09_o.jpg", "10_o.jpg"}
+1. Visual Studio 2022 is installed
+2. NVIDIA GPU Computing Toolkit is installed
 
-1. It is assumed that there is a Common directory in the project directory.
-cd /home/coder/project
 
-2.
+Steps
+
+1.
 git clone https://github.com/tacores/CUDAatScaleForTheEnterpriseCourseProjectTemplate.git tacores_project
 
+2.
+Open blueCutFilter_vs2022.sln via Visual Studio 2022.
+
 3.
-cd tacores_project
+build
 
-4.
-make build
+4. list image files before execution (10 jpg files)
+Open Command prompt
 
-5. list image files before execution (10 jpg files)
-ls ./data
+5.
+cd bin\win64\Debug
 
-6. execute. no parameter because file names are hold in hard coding string array
+6.
+cp data bin\win64\Debug
+
+7. execute. no parameter because file names are hold in hard coding string array
 ./blueCutFilter.exe
 
-7. list image files after execution (NN_o.jpg files should be created)
-ls ./data
