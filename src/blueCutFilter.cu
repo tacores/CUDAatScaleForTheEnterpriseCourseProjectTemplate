@@ -139,7 +139,7 @@ int main(int argc, char *argv[])
       err = cudaMemcpy(d_src, h_src, size, cudaMemcpyHostToDevice);
 
       // execute kernel code
-      dim3 grdDim(width, 3, 1);
+      dim3 grdDim(width, 3, 1); // 3bits per piexel
       dim3 blkDim(height, 1, 1);
       cut_blue_element<<<grdDim, blkDim>>>(d_dst, pitch, d_src, pitch);
 
