@@ -6,9 +6,8 @@
 #endif
 
 #include <Exceptions.h>
-#include <ImageIO.h>
-#include <ImagesCPU.h>
-#include <ImagesNPP.h>
+#include <FreeImage.h>
+#include "device_launch_parameters.h"
 
 #include <string.h>
 #include <fstream>
@@ -23,13 +22,21 @@
 std::string inputFileNames[] = {"01.jpg", "02.jpg", "03.jpg", "04.jpg", "05.jpg", "06.jpg", "07.jpg", "08.jpg", "09.jpg", "10.jpg"};
 std::string outputFileNames[] = {"01_o.jpg", "02_o.jpg", "03_o.jpg", "04_o.jpg", "05_o.jpg", "06_o.jpg", "07_o.jpg", "08_o.jpg", "09_o.jpg", "10_o.jpg"};
 
-void
-loadImage(const std::string &rFileName, npp::ImageCPU_8u_C3 &rImage)
+#define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
+inline void gpuAssert(cudaError_t code, const char* file, int line, bool abort = true)
 {
-  // set your own FreeImage error handler
-  FreeImage_SetOutputMessage(FreeImageErrorHandler);
+    if (code != cudaSuccess)
+    {
+        fprintf(stderr, "GPUassert: %s %s %d\n", cudaGetErrorString(code), file, line);
+        if (abort) exit(code);
+    }
+}
 
+FIBITMAP*
+loadImage(const std::string &rFileName)
+{
   FREE_IMAGE_FORMAT eFormat = FreeImage_GetFileType(rFileName.c_str());
+  std::cout << "eFormat : " << eFormat << std::endl;
 
   // no signature? try to guess the file format from the file extension
   if (eFormat == FIF_UNKNOWN)
@@ -39,70 +46,31 @@ loadImage(const std::string &rFileName, npp::ImageCPU_8u_C3 &rImage)
 
   NPP_ASSERT(eFormat != FIF_UNKNOWN);
   // check that the plugin has reading capabilities ...
-  FIBITMAP *pBitmap;
-
-  if (FreeImage_FIFSupportsReading(eFormat))
-  {
-      FIBITMAP *pTempBitmap = FreeImage_Load(eFormat, rFileName.c_str());
-      pBitmap = FreeImage_ConvertTo8Bits(pTempBitmap);
-  }
+  FIBITMAP *pBitmap = FreeImage_Load(eFormat, rFileName.c_str());
 
   NPP_ASSERT(pBitmap != 0);
-  // make sure this is an 8-bit single channel image
-  //NPP_ASSERT(FreeImage_GetColorType(pBitmap) == FIC_MINISBLACK);
-  //std::cout << FreeImage_GetBPP(pBitmap) << std::endl;
-  NPP_ASSERT(FreeImage_GetBPP(pBitmap) == 8);
+  std::cout << "src width : " << FreeImage_GetWidth(pBitmap) << std::endl;
+  std::cout << "src height : " << FreeImage_GetHeight(pBitmap) << std::endl;
+  return pBitmap;
+}
 
-  // create an ImageCPU to receive the loaded image data
-  npp::ImageCPU_8u_C3 oImage(FreeImage_GetWidth(pBitmap), FreeImage_GetHeight(pBitmap));
+// Device Code
+// Set blue element of RGB pixel to Zero.
+__global__ void cut_blue_element(BYTE* d_dst, int dstPitch, BYTE* d_img, int srcPitch) {
+    int block_id = blockIdx.z * (gridDim.x * gridDim.y)
+        + blockIdx.y * (gridDim.x)
+        + blockIdx.x;
+    int idx = block_id * (blockDim.x * blockDim.y * blockDim.z)
+        + (threadIdx.z * (blockDim.x * blockDim.y))
+        + (threadIdx.y * blockDim.x)
+        + threadIdx.x;
 
-  // Copy the FreeImage data into the new ImageCPU
-  unsigned int nSrcPitch = FreeImage_GetPitch(pBitmap);
-  const Npp8u *pSrcLine = FreeImage_GetBits(pBitmap) + nSrcPitch * (FreeImage_GetHeight(pBitmap) -1);
-  Npp8u *pDstLine = oImage.data();
-  unsigned int nDstPitch = oImage.pitch();
-
-  for (size_t iLine = 0; iLine < oImage.height(); ++iLine)
-  {
-      memcpy(pDstLine, pSrcLine, oImage.width() * sizeof(Npp8u));
-      pSrcLine -= nSrcPitch;
-      pDstLine += nDstPitch;
+  if (idx % 3 == 0) {   // blue element of RGB
+      d_dst[idx] = 0;
   }
-
-  // swap the user given image with our result image, effecively
-  // moving our newly loaded image data into the user provided shell
-  oImage.swap(rImage);
-}
-
-// Save an RGB image to disk.
-void
-saveImage(const std::string &rFileName, const npp::ImageCPU_8u_C3 &rImage)
-{
-    // create the result image storage using FreeImage so we can easily
-    // save
-    FIBITMAP *pResultBitmap = FreeImage_Allocate(rImage.width(), rImage.height(), 8 /* bits per pixel */);
-    NPP_ASSERT_NOT_NULL(pResultBitmap);
-    unsigned int nDstPitch   = FreeImage_GetPitch(pResultBitmap);
-    Npp8u *pDstLine = FreeImage_GetBits(pResultBitmap) + nDstPitch * (rImage.height()-1);
-    const Npp8u *pSrcLine = rImage.data();
-    unsigned int nSrcPitch = rImage.pitch();
-
-    for (size_t iLine = 0; iLine < rImage.height(); ++iLine)
-    {
-        memcpy(pDstLine, pSrcLine, rImage.width() * sizeof(Npp8u));
-        pSrcLine += nSrcPitch;
-        pDstLine -= nDstPitch;
-    }
-
-    // now save the result image
-    bool bSuccess;
-    bSuccess = FreeImage_Save(FIF_PGM, pResultBitmap, rFileName.c_str(), 0) == TRUE;
-    NPP_ASSERT_MSG(bSuccess, "Failed to save result image.");
-}
-
-__global__ void cut_blue_element(Npp8u* d_dst, int dstPitch, Npp8u* d_img, int srcPitch) {
-  int idx = threadIdx.y * srcPitch + threadIdx.x;
-  d_dst[idx] = d_img[idx] & 0xFC; // 1111 1100
+  else {    // red or green element of RGB
+      d_dst[idx] = d_img[idx];
+  }
 }
 
 int main(int argc, char *argv[])
@@ -140,39 +108,66 @@ int main(int argc, char *argv[])
 
       std::string sResultFilename = "data/" + outputFileNames[i];
 
-      // declare a host image object for an 8-bit grayscale image
-      npp::ImageCPU_8u_C3 oHostSrc;
-      // load gray-scale image from disk
-      loadImage(sFilename, oHostSrc);
-      int width = (int)oHostSrc.width();
-      int height = (int)oHostSrc.height();
+      // load source image from disk
+      FIBITMAP*  srcBitmap = loadImage(sFilename);
 
-      // declare a device image and copy construct from the host image,
-      // i.e. upload host to device
-      npp::ImageNPP_8u_C3 oDeviceSrc(oHostSrc);
-      npp::ImageNPP_8u_C3 oDeviceDst(width, height);
+      int height = FreeImage_GetHeight(srcBitmap);
+      int width = FreeImage_GetWidth(srcBitmap);
+      int pitch = FreeImage_GetPitch(srcBitmap);
+      int bpp = FreeImage_GetBPP(srcBitmap);
 
-      dim3 grdDim(1, 1, 1);
-    	dim3 blkDim(width, height, 1);
+      size_t size = height * pitch;
+      // device memory
+      BYTE* d_src = NULL;
+      BYTE* d_dst = NULL;
 
-      Npp8u *pSrc = oDeviceSrc.data();
-      unsigned int nSrcPitch = oDeviceSrc.pitch();
+      cudaError_t err = cudaMalloc(&d_src, size);
+      if (err != cudaSuccess)
+      {
+          fprintf(stderr, "Failed to allocate device vector d_src (error code %s)!\n", cudaGetErrorString(err));
+          exit(EXIT_FAILURE);
+      }
+      err = cudaMalloc(&d_dst, size);
+      if (err != cudaSuccess)
+      {
+          fprintf(stderr, "Failed to allocate device vector d_dst (error code %s)!\n", cudaGetErrorString(err));
+          exit(EXIT_FAILURE);
+      }
 
-      Npp8u *pDst = oDeviceDst.data();
-      unsigned int nDstPitch = oDeviceDst.pitch();
+      // copy host to device
+      BYTE* h_src = FreeImage_GetBits(srcBitmap);
+      err = cudaMemcpy(d_src, h_src, size, cudaMemcpyHostToDevice);
 
-      cut_blue_element<<<grdDim, blkDim>>>(pDst, nDstPitch, pSrc, nSrcPitch);
+      // execute kernel code
+      dim3 grdDim(width, 3, 1);
+      dim3 blkDim(height, 1, 1);
+      cut_blue_element<<<grdDim, blkDim>>>(d_dst, pitch, d_src, pitch);
 
-      // declare a host image for the result
-      npp::ImageCPU_8u_C3 oHostDst(oDeviceDst.size());
-      // and copy the device result data into it
-      oDeviceDst.copyTo(oHostDst.data(), oHostDst.pitch());
+      gpuErrchk(cudaPeekAtLastError());
+      gpuErrchk(cudaDeviceSynchronize());
 
-      saveImage(sResultFilename, oHostDst);
+      FIBITMAP* pNewBitmap = FreeImage_Allocate(width, height, bpp);
+
+      // copy device to host
+      err = cudaMemcpy(FreeImage_GetBits(pNewBitmap), d_dst, size, cudaMemcpyDeviceToHost);
+
+      // Save Image file
+      FreeImage_Save(FIF_JPEG, pNewBitmap, sResultFilename.c_str(), 0);
       std::cout << "Saved image: " << sResultFilename << std::endl;
 
-      nppiFree(oDeviceSrc.data());
-      nppiFree(oDeviceDst.data());
+      // Free memory
+      err = cudaFree(d_dst);
+      if (err != cudaSuccess)
+      {
+          fprintf(stderr, "Failed to free device vector d_dst (error code %s)!\n", cudaGetErrorString(err));
+          exit(EXIT_FAILURE);
+      }
+      err = cudaFree(d_src);
+      if (err != cudaSuccess)
+      {
+          fprintf(stderr, "Failed to free device vector d_dst (error code %s)!\n", cudaGetErrorString(err));
+          exit(EXIT_FAILURE);
+      }
     }
   }
   catch (npp::Exception &rException)
@@ -189,7 +184,6 @@ int main(int argc, char *argv[])
     std::cerr << "Aborting." << std::endl;
 
     exit(EXIT_FAILURE);
-    return -1;
   }
 
   return 0;
