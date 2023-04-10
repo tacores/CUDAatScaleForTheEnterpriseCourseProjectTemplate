@@ -7,6 +7,11 @@ https://github.com/tacores/CUDAatScaleForTheEnterpriseCourseProjectTemplate
 The CUDA program in this project removes the blue component of the image and saves the file.
 The only part performed by the GPU kernel is the removal of the blue component. (cut_blue_element())
 
+<img src="https://github.com/tacores/CUDAatScaleForTheEnterpriseCourseProjectTemplate/blob/main/09.jpg" width="300">
+<img src="https://github.com/tacores/CUDAatScaleForTheEnterpriseCourseProjectTemplate/blob/main/09_o.jpg" width="300">
+<img src="https://github.com/tacores/CUDAatScaleForTheEnterpriseCourseProjectTemplate/blob/main/02.jpg" width="300">
+<img src="https://github.com/tacores/CUDAatScaleForTheEnterpriseCourseProjectTemplate/blob/main/02_o.jpg" width="300">
+
 ### Input
 {"01.jpg", "02.jpg", "03.jpg", "04.jpg", "05.jpg", "06.jpg", "07.jpg", "08.jpg", "09.jpg", "10.jpg"}
 ### Output
